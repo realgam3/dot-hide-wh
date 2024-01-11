@@ -11,8 +11,6 @@
 // @include         cmd.exe
 // @include         pwsh.exe
 // @include         powershell.exe
-// @exclude         windhawk.exe
-// @exclude         VSCodium.exe
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
