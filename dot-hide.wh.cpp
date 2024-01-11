@@ -32,8 +32,6 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
 // ==/WindhawkModReadme==
 
 #include <string_view>
-#include <Winternl.h>
-#include <minwindef.h>
 #include <winternl.h>
 
 template <typename FileInfoType>
