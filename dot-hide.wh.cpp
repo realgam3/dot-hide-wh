@@ -1,13 +1,12 @@
 // ==WindhawkMod==
 // @id              dot-hide
 // @name            Dot Hide
-// @description     Keep Dot Files and Directories out of sight, Because it wouldn't happen in Linux...
+// @description     Keep dot files and directories out of sight, Because it wouldn't happen in Linux...
 // @version         1.0.0
 // @author          Tomer Zait (realgam3)
 // @github          https://github.com/realgam3
 // @twitter         https://twitter.com/realgam3
 // @homepage        https://realgam3.com/
-// @include         *
 // @include         explorer.exe
 // @include         cmd.exe
 // @include         pwsh.exe
@@ -27,7 +26,7 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
 ![Before](https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/before.png)
 
 ## After
-![After](https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/before.png)
+![After](https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/after.png)
 
 */
 // ==/WindhawkModReadme==
