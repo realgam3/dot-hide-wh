@@ -7,4 +7,4 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
 ![Before](https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/before.png)
 
 ## After
-![After](https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/before.png)
+![After](https://raw.githubusercontent.com/realgam3/dot-hide-wh/main/assets/img/after.png)
