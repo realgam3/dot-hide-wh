@@ -38,7 +38,8 @@ void HideFilesInDirectory(void* FileInformation) {
         std::wstring_view fileName(fileInformation->FileName, fileInformation->FileNameLength / sizeof(WCHAR));
 
         // fileName starts with . but not in [".", ".."]
-        if (!(fileInformation->FileAttributes & FILE_ATTRIBUTE_HIDDEN) && fileName.length() >= 2 && fileName[0] == '.'
+        if (!(fileInformation->FileAttributes & FILE_ATTRIBUTE_HIDDEN) 
+			&& fileName.length() >= 2 && fileName[0] == '.'
             && (fileName[1] != '.' || fileName.length() > 2)) {
             Wh_Log(L"Class->Hide: %.*s", static_cast<int>(fileName.length()), fileName.data());
             fileInformation->FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
