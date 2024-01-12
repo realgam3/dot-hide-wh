@@ -7,10 +7,7 @@
 // @github          https://github.com/realgam3
 // @twitter         https://twitter.com/realgam3
 // @homepage        https://realgam3.com/
-// @include         explorer.exe
-// @include         cmd.exe
-// @include         pwsh.exe
-// @include         powershell.exe
+// @include         *
 // ==/WindhawkMod==
 
 // ==WindhawkModReadme==
@@ -31,46 +28,48 @@ Dot Hide tackles this by automatically hiding these files and directories, creat
 
 #include <string_view>
 #include <winternl.h>
+#include <windhawk_utils.h>
 
-template <typename FileInfoType>
-void HideFilesInDirectory(void* FileInformation, BOOLEAN ReturnSingleEntry) {
-    FileInfoType* fileInformation = static_cast<FileInfoType*>(FileInformation);
+template<typename FileInfoType>
+void HideFilesInDirectory(void* FileInformation) {
+    FileInfoType* fileInformation = static_cast<FileInfoType *>(FileInformation);
 
     while (fileInformation) {
         std::wstring_view fileName(fileInformation->FileName, fileInformation->FileNameLength / sizeof(WCHAR));
 
         // fileName starts with . but not in [".", ".."]
-        if (fileName.length() >= 2 && fileName[0] == '.' && (fileName[1] != '.' || fileName.length() > 2)) {
+        if (!(fileInformation->FileAttributes & FILE_ATTRIBUTE_HIDDEN) && fileName.length() >= 2 && fileName[0] == '.'
+            && (fileName[1] != '.' || fileName.length() > 2)) {
             Wh_Log(L"Class->Hide: %.*s", static_cast<int>(fileName.length()), fileName.data());
             fileInformation->FileAttributes |= FILE_ATTRIBUTE_HIDDEN;
         }
 
-        if (fileInformation->NextEntryOffset == 0 || ReturnSingleEntry) {
+        if (fileInformation->NextEntryOffset == 0) {
             break;
         }
 
-        fileInformation = reinterpret_cast<FileInfoType*>(
+        fileInformation = reinterpret_cast<FileInfoType *>(
             reinterpret_cast<LPBYTE>(fileInformation) + fileInformation->NextEntryOffset);
     }
 }
 
-void NtHideDirectoryFile(LPVOID FileInformation, FILE_INFORMATION_CLASS FileInformationClass, BOOLEAN ReturnSingleEntry) {
+void NtHideDirectoryFile(LPVOID FileInformation, FILE_INFORMATION_CLASS FileInformationClass) {
     switch (FileInformationClass) {
         case FileFullDirectoryInformation: {
             Wh_Log(L"Class: FileFullDirectoryInformation");
-            HideFilesInDirectory<FILE_FULL_DIR_INFORMATION>(FileInformation, ReturnSingleEntry);
+            HideFilesInDirectory<FILE_FULL_DIR_INFORMATION>(FileInformation);
             break;
         }
 
         case FileBothDirectoryInformation: {
             Wh_Log(L"Class: FileBothDirectoryInformation");
-            HideFilesInDirectory<FILE_BOTH_DIR_INFORMATION>(FileInformation, ReturnSingleEntry);
+            HideFilesInDirectory<FILE_BOTH_DIR_INFORMATION>(FileInformation);
             break;
         }
 
         case FileIdBothDirectoryInformation: {
             Wh_Log(L"Class: FileIdBothDirectoryInformation");
-            HideFilesInDirectory<FILE_ID_BOTH_DIR_INFORMATION>(FileInformation, ReturnSingleEntry);
+            HideFilesInDirectory<FILE_ID_BOTH_DIR_INFORMATION>(FileInformation);
             break;
         }
 
@@ -81,60 +80,66 @@ void NtHideDirectoryFile(LPVOID FileInformation, FILE_INFORMATION_CLASS FileInfo
     }
 }
 
-typedef NTSTATUS(NTAPI* NtQueryDirectoryFile_t)(
-    HANDLE                 FileHandle,
-    HANDLE                 Event,
-    PIO_APC_ROUTINE        ApcRoutine,
-    PVOID                  ApcContext,
-    PIO_STATUS_BLOCK       IoStatusBlock,
-    PVOID                  FileInformation,
-    ULONG                  Length,
+typedef NTSTATUS (NTAPI* NtQueryDirectoryFile_t)(
+    HANDLE FileHandle,
+    HANDLE Event,
+    PIO_APC_ROUTINE ApcRoutine,
+    PVOID ApcContext,
+    PIO_STATUS_BLOCK IoStatusBlock,
+    PVOID FileInformation,
+    ULONG Length,
     FILE_INFORMATION_CLASS FileInformationClass,
-    BOOLEAN                ReturnSingleEntry,
-    PUNICODE_STRING        FileName,
-    BOOLEAN                RestartScan
+    BOOLEAN ReturnSingleEntry,
+    PUNICODE_STRING FileName,
+    BOOLEAN RestartScan
 );
+
 NtQueryDirectoryFile_t NtQueryDirectoryFile_Original;
 
-NTSTATUS NtQueryDirectoryFile_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, LPVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, LPVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, BOOLEAN ReturnSingleEntry, PUNICODE_STRING FileName, BOOLEAN RestartScan) {
+NTSTATUS WINAPI NtQueryDirectoryFile_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
+                                          LPVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, LPVOID FileInformation,
+                                          ULONG Length, FILE_INFORMATION_CLASS FileInformationClass,
+                                          BOOLEAN ReturnSingleEntry, PUNICODE_STRING FileName, BOOLEAN RestartScan) {
     Wh_Log(L"NtQueryDirectoryFile_Hook called");
 
-    NTSTATUS status = NtQueryDirectoryFile_Original(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, FileInformation, Length, FileInformationClass, ReturnSingleEntry, FileName, RestartScan);
+    NTSTATUS status = NtQueryDirectoryFile_Original(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock,
+                                                    FileInformation, Length, FileInformationClass, ReturnSingleEntry,
+                                                    FileName, RestartScan);
     if (NT_SUCCESS(status)) {
-        NtHideDirectoryFile(FileInformation, FileInformationClass, ReturnSingleEntry);
+        NtHideDirectoryFile(FileInformation, FileInformationClass);
     }
+
     return status;
 }
 
-enum QUERY_FLAG : ULONG {
-    SL_RESTART_SCAN = 0x00000001,
-    SL_RETURN_SINGLE_ENTRY = 0x00000002,
-    SL_INDEX_SPECIFIED = 0x00000004,
-    SL_RETURN_ON_DISK_ENTRIES_ONLY = 0x00000008,
-    SL_NO_CURSOR_UPDATE_QUERY = 0x00000010
-};
-
-typedef NTSTATUS(NTAPI* NtQueryDirectoryFileEx_t)(
-    HANDLE                 FileHandle,
-    HANDLE                 Event,
-    PIO_APC_ROUTINE        ApcRoutine,
-    PVOID                  ApcContext,
-    PIO_STATUS_BLOCK       IoStatusBlock,
-    PVOID                  FileInformation,
-    ULONG                 Length,
+typedef NTSTATUS (NTAPI* NtQueryDirectoryFileEx_t)(
+    HANDLE FileHandle,
+    HANDLE Event,
+    PIO_APC_ROUTINE ApcRoutine,
+    PVOID ApcContext,
+    PIO_STATUS_BLOCK IoStatusBlock,
+    PVOID FileInformation,
+    ULONG Length,
     FILE_INFORMATION_CLASS FileInformationClass,
-    ULONG                  QueryFlags,
-    PUNICODE_STRING        FileName
+    ULONG QueryFlags,
+    PUNICODE_STRING FileName
 );
-NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx_Original;
 
-NTSTATUS NtQueryDirectoryFileEx_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation, ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, ULONG QueryFlags, PUNICODE_STRING FileName) {
+NtQueryDirectoryFileEx_t WINAPI NtQueryDirectoryFileEx_Original;
+
+NTSTATUS WINAPI NtQueryDirectoryFileEx_Hook(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine,
+                                            PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, PVOID FileInformation,
+                                            ULONG Length, FILE_INFORMATION_CLASS FileInformationClass, ULONG QueryFlags,
+                                            PUNICODE_STRING FileName) {
     Wh_Log(L"NtQueryDirectoryFileEx_Hook called");
 
-    NTSTATUS status = NtQueryDirectoryFileEx_Original(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock, FileInformation, Length, FileInformationClass, QueryFlags, FileName);
+    NTSTATUS status = NtQueryDirectoryFileEx_Original(FileHandle, Event, ApcRoutine, ApcContext, IoStatusBlock,
+                                                      FileInformation, Length, FileInformationClass, QueryFlags,
+                                                      FileName);
     if (NT_SUCCESS(status)) {
-        NtHideDirectoryFile(FileInformation, FileInformationClass, QueryFlags & SL_RETURN_SINGLE_ENTRY);
+        NtHideDirectoryFile(FileInformation, FileInformationClass);
     }
+
     return status;
 }
 
@@ -145,15 +150,17 @@ BOOL Wh_ModInit() {
 
     HMODULE ntdllModule = LoadLibrary(L"ntdll.dll");
 
-    NtQueryDirectoryFile_t NtQueryDirectoryFile = (NtQueryDirectoryFile_t)GetProcAddress(ntdllModule, "NtQueryDirectoryFile");
-    Wh_SetFunctionHook((void*)NtQueryDirectoryFile,
-                       (void*)NtQueryDirectoryFile_Hook,
-                       (void**)&NtQueryDirectoryFile_Original);
+    NtQueryDirectoryFile_t NtQueryDirectoryFile = (NtQueryDirectoryFile_t)GetProcAddress(
+        ntdllModule, "NtQueryDirectoryFile");
+    WindhawkUtils::Wh_SetFunctionHookT((void *)NtQueryDirectoryFile, 
+                                       (void *)NtQueryDirectoryFile_Hook,
+                                       (void **)&NtQueryDirectoryFile_Original);
 
-    NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx = (NtQueryDirectoryFileEx_t)GetProcAddress(ntdllModule, "NtQueryDirectoryFileEx");
-    Wh_SetFunctionHook((void*)NtQueryDirectoryFileEx,
-                       (void*)NtQueryDirectoryFileEx_Hook,
-                       (void**)&NtQueryDirectoryFileEx_Original);
+    NtQueryDirectoryFileEx_t NtQueryDirectoryFileEx = (NtQueryDirectoryFileEx_t)GetProcAddress(
+        ntdllModule, "NtQueryDirectoryFileEx");
+    WindhawkUtils::Wh_SetFunctionHookT((void *)NtQueryDirectoryFileEx, 
+                                       (void *)NtQueryDirectoryFileEx_Hook,
+                                       (void **)&NtQueryDirectoryFileEx_Original);
 
     return TRUE;
 }
